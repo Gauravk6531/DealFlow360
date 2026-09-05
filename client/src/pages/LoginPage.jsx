@@ -76,6 +76,8 @@ export default function LoginPage() {
             </div>
           </div>
           <div className="text-center mt-4 text-xs text-ink-700/50">
+            Need an account? <Link to="/signup" className="font-semibold text-brand-700 hover:underline">Create one</Link>
+            <span className="mx-2">·</span>
             <Link to="/portal/login" className="font-semibold text-brand-700 hover:underline">Customer portal</Link>
           </div>
         </div>

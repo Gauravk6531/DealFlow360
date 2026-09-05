@@ -36,6 +36,7 @@ async function clearAll() {
 async function seed() {
   await connectDB(process.env.MONGO_URI);
   await clearAll();
+  await Promise.all(models.map((model) => model.syncIndexes()));
 
   // ---------- Settings (governance policy) ----------
   const settings = await Settings.create({ key: "default" });
