@@ -46,7 +46,7 @@ export function scoreOffer({ offer, requestedPrice, quantity, settings }) {
     priceCompetitiveness * weights.priceCompetitiveness +
     dealerProfitability * weights.dealerProfitability +
     companyProfitability * weights.companyProfitability +
-    deliveryScore * weights.deliveryScore +
+    deliveryScore * weights.deliveryScore +  
     inventoryScore * weights.inventoryScore +
     reliability * weights.reliability +
     shippingScore * weights.shippingScore;

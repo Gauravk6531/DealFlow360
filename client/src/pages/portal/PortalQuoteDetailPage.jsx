@@ -72,10 +72,14 @@ export default function PortalQuoteDetailPage() {
     setBusy(false);
   };
 
-  const stage = quote.negotiationStatus === "Counter Offered" || quote.negotiationStatus === "Negotiating"
+  const stage = quote.lostAt ? "Lost"
+    : quote.wonAt || quote.confirmedAt ? "Won"
+    : quote.approvalStatus === "Pending" ? "Approval"
+    : quote.approvalStatus === "Approved" ? "Approved"
+    : quote.negotiationStatus === "Counter Offered" || quote.negotiationStatus === "Negotiating"
     ? "Negotiation"
     : quote.negotiationStatus === "Accepted" ? "Approved"
-      : quote.confirmedAt ? "Won" : "Sent";
+      : "Sent";
 
   return (
     <div>
@@ -172,7 +176,7 @@ export default function PortalQuoteDetailPage() {
               <div className="text-sm text-ink-700/60">We are evaluating your request. A deal specialist will respond shortly.</div>
             )}
 
-            {stage === "Sent" && (
+            {(stage === "Sent" || stage === "Negotiation") && !counter && (
               <form onSubmit={requestPrice} className="space-y-3">
                 <div>
                   <label className="label">Your target total (subtotal before GST)</label>

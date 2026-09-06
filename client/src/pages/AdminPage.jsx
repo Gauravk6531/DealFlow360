@@ -57,11 +57,11 @@ export default function AdminPage({ tab }) {
       }
     } catch (e) { toast.push(errMsg(e), "error"); setRows([]); }
   };
+  useEffect(() => { setActive(tab || "products"); }, [tab]);
   useEffect(() => {
-    if (active === "settings") { loadSettings(); return; }
-    setActive(tab || "products");
-  }, [tab]);
-  useEffect(() => { if (active !== "settings") load(active); }, [active]);
+    if (active === "settings") loadSettings();
+    else load(active);
+  }, [active]);
 
   const loadSettings = async () => {
     setRows(null);

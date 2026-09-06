@@ -4,6 +4,7 @@ import api, { errMsg } from "../services/api";
 import { fmtINR } from "../utils/format";
 import { Loader, PageHeader, StageBadge, RiskBadge, HealthBadge, Panel, Modal } from "../components/ui";
 import { useToast } from "../store/ui";
+import { useAuth } from "../store/auth";
 import { deriveStage } from "./QuotesPage";
 import { Star, Share2, Send, FlaskConical, Handshake, Truck, Receipt, BadgeCheck, AlertTriangle, RefreshCw, FileText, GitBranch } from "lucide-react";
 
@@ -11,6 +12,7 @@ export default function QuoteDetailPage() {
   const { id } = useParams();
   const nav = useNavigate();
   const toast = useToast();
+  const { user } = useAuth();
   const [d, setD] = useState(null);
   const [simOpen, setSimOpen] = useState(false);
   const [negOpen, setNegOpen] = useState(false);
@@ -26,12 +28,23 @@ export default function QuoteDetailPage() {
   if (!d) return <Loader label="Loading deal intelligence…" />;
   const { quote, risk, health, dealerComparison, approvals, negotiations, recommendations, settings } = d;
   const stage = deriveStage(quote);
+  const canEdit = user?.role !== "SALES_REP" || String(quote.salesRepId?._id || quote.salesRepId) === String(user.id);
 
   const submitForApproval = async () => {
     setBusy(true);
     try {
       const r = await api.post(`/quotes/${id}/submit`, {});
       toast.push(r.data.autoApproved ? "Auto-approved! Within autonomous limits." : `Routed to: ${(r.data.approvalChain || []).join(" → ")}`);
+      await load();
+    } catch (e) { toast.push(errMsg(e), "error"); }
+    setBusy(false);
+  };
+
+  const confirmDeal = async () => {
+    setBusy(true);
+    try {
+      await api.post(`/quotes/${id}/confirm`, { expectedVersion: quote.version });
+      toast.push("Deal confirmed and marked won");
       await load();
     } catch (e) { toast.push(errMsg(e), "error"); }
     setBusy(false);
@@ -156,7 +169,7 @@ export default function QuoteDetailPage() {
                 <div key={r.product.id} className="border border-brand-100 bg-brand-50/40 rounded-xl p-4">
                   <div className="flex items-center justify-between">
                     <div className="text-sm font-bold text-ink-900">{r.product.name}</div>
-                    <button onClick={() => applyRec(r)} className="text-xs px-2 py-1 rounded-lg bg-brand-600 text-white hover:bg-brand-700">Add</button>
+                    {canEdit && <button onClick={() => applyRec(r)} className="text-xs px-2 py-1 rounded-lg bg-brand-600 text-white hover:bg-brand-700">Add</button>}
                   </div>
                   <div className="text-xs text-ink-700/60 mt-1">{r.product.category} · {r.matchReason}</div>
                   <div className="flex justify-between text-xs mt-2">
@@ -212,11 +225,12 @@ export default function QuoteDetailPage() {
         <div className="space-y-5">
           <Panel title="Actions">
             <div className="space-y-2">
-              {!quote.submittedAt && <button className="btn-primary w-full justify-center" onClick={submitForApproval} disabled={busy}><Send size={15} /> Submit for approval</button>}
-              <button className="btn-secondary w-full justify-center" onClick={() => setNegOpen(true)}><Handshake size={15} /> Negotiate price</button>
-              <button className="btn-secondary w-full justify-center" onClick={() => setSimOpen(true)}><FlaskConical size={15} /> What-If simulator</button>
-              <button className="btn-secondary w-full justify-center" onClick={() => setFulOpen(true)} disabled={!quote.wonAt && stage !== "Won" && stage !== "Fulfillment"}><Truck size={15} /> Plan fulfillment</button>
-              <button className="btn-secondary w-full justify-center" onClick={() => setBillOpen(true)} disabled={!quote.wonAt && stage !== "Won" && stage !== "Fulfillment"}><Receipt size={15} /> Billing preview</button>
+              {canEdit && !quote.submittedAt && <button className="btn-primary w-full justify-center" onClick={submitForApproval} disabled={busy}><Send size={15} /> Submit for approval</button>}
+              {canEdit && quote.approvalStatus === "Approved" && !quote.wonAt && <button className="btn-primary w-full justify-center" onClick={confirmDeal} disabled={busy}><BadgeCheck size={15} /> Confirm deal</button>}
+              {canEdit && <button className="btn-secondary w-full justify-center" onClick={() => setNegOpen(true)}><Handshake size={15} /> Negotiate price</button>}
+              {canEdit && <button className="btn-secondary w-full justify-center" onClick={() => setSimOpen(true)}><FlaskConical size={15} /> What-If simulator</button>}
+              <button className="btn-secondary w-full justify-center" onClick={() => setFulOpen(true)}><Truck size={15} /> Plan fulfillment</button>
+              <button className="btn-secondary w-full justify-center" onClick={() => setBillOpen(true)}><Receipt size={15} /> Billing preview</button>
             </div>
             <div className="mt-4 text-xs text-ink-700/50">
               <div className="font-bold text-ink-700/60 mb-1 flex items-center gap-1"><GitBranch size={12} /> Approval policy</div>
@@ -383,8 +397,8 @@ function NegotiateModal({ open, onClose, quoteId, toast, onDone }) {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
             <Metric label="Original" value={fmtINR(result.originalPrice)} />
             <Metric label="Requested" value={fmtINR(result.customerRequestedPrice)} />
-            <Metric label="Proposed" value={fmtINR(result.proposedPrice)} accent="text-emerald-700" />
-            <Metric label="Customer savings" value={fmtINR(result.customerSavings)} accent="text-emerald-700" />
+            <Metric label="Proposed" value={result.decision === "REJECT" ? "No offer" : fmtINR(result.proposedPrice)} accent={result.decision === "REJECT" ? "text-ink-700/60" : "text-emerald-700"} />
+            <Metric label="Customer savings" value={result.decision === "REJECT" ? "Not available" : fmtINR(result.customerSavings)} accent={result.decision === "REJECT" ? "text-ink-700/60" : "text-emerald-700"} />
           </div>
           {result.concessions?.length > 0 && (
             <div className="mb-3 flex flex-wrap gap-1.5">
@@ -393,9 +407,9 @@ function NegotiateModal({ open, onClose, quoteId, toast, onDone }) {
             </div>
           )}
           <div className="grid grid-cols-3 gap-3 text-center bg-ink-50 rounded-xl p-3 mb-3">
-            <div><div className="text-[10px] uppercase font-bold text-ink-700/40">Dealer profit</div><b className="text-profit">{fmtINR(result.dealerProfit)}</b></div>
-            <div><div className="text-[10px] uppercase font-bold text-ink-700/40">Company profit</div><b className="text-profit">{fmtINR(result.companyProfit)}</b></div>
-            <div><div className="text-[10px] uppercase font-bold text-ink-700/40">Dealer</div><b className="text-sm">{result.dealerName || "—"}</b></div>
+            <div><div className="text-[10px] uppercase font-bold text-ink-700/40">Dealer profit</div><b className={result.decision === "REJECT" ? "text-ink-700/60" : "text-profit"}>{result.decision === "REJECT" ? "Not available" : fmtINR(result.dealerProfit)}</b></div>
+            <div><div className="text-[10px] uppercase font-bold text-ink-700/40">Company profit</div><b className={result.decision === "REJECT" ? "text-ink-700/60" : "text-profit"}>{result.decision === "REJECT" ? "Not available" : fmtINR(result.companyProfit)}</b></div>
+            <div><div className="text-[10px] uppercase font-bold text-ink-700/40">Dealer</div><b className="text-sm">{result.decision === "REJECT" ? "No viable dealer" : result.dealerName || "—"}</b></div>
           </div>
           {result.recommendation && <div className="text-sm text-ink-700/70">💡 {result.recommendation}</div>}
         </div>

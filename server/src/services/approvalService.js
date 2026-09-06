@@ -76,6 +76,16 @@ export async function findApprover(role) {
   return User.findOne({ role, active: true }).collation({ locale: "en", strength: 2 });
 }
 
+export async function clearPendingApprovals(quote, reason) {
+  await Approval.updateMany(
+    { quoteId: quote._id, status: "Pending" },
+    { $set: { status: "Skipped", reason: reason || "No approval required after auto-accepted negotiation" } }
+  );
+  quote.approvalStatus = "Approved";
+  quote.approvalChain = [];
+  await quote.save();
+}
+
 function roleLabel(role) {
   return role === "SALES_MANAGER" ? "Sales Manager" : role === "FINANCE" ? "Finance" : role;
 }

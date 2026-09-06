@@ -15,11 +15,13 @@ export default function PortalQuotesPage() {
   if (quotes.length === 0) return <><PageHeader title="My quotations" /><Empty icon="📄" title="No quotations yet" sub="Your sales partner will share quotations here." /></>;
 
   const stageOf = (q) => {
+    if (q.lostAt) return "Lost";
+    if (q.wonAt || q.confirmedAt) return "Won";
+    if (q.approvalStatus === "Pending") return "Approval";
+    if (q.approvalStatus === "Approved") return "Approved";
     if (q.negotiationStatus === "Counter Offered") return "Negotiation";
     if (q.negotiationStatus === "Negotiating") return "Negotiation";
     if (q.negotiationStatus === "Accepted") return "Approved";
-    if (q.lostAt) return "Lost";
-    if (q.confirmedAt) return "Won";
     return "Sent";
   };
 

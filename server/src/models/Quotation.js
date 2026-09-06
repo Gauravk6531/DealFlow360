@@ -20,6 +20,7 @@ const lineSchema = new mongoose.Schema(
     isSubscription: { type: Boolean, default: false },
     billingCycle: { type: String, enum: ["Monthly", "Quarterly", "Yearly"], default: null },
     productName: { type: String, default: "" },
+    comment: { type: String, default: "" },
   },
   { _id: true }
 );

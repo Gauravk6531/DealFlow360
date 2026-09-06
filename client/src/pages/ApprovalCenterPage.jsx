@@ -19,7 +19,7 @@ export default function ApprovalCenterPage() {
 
   if (!approvals) return <Loader />;
 
-  const myQueue = approvals.filter((a) => a.status === "Pending" && a.approverRole === user.role);
+  const myQueue = approvals.filter((a) => a.status === "Pending" && String(a.approver?._id || a.approver) === String(user.id));
   const visible = approvals;
 
   const review = async (a, status) => {
@@ -47,7 +47,7 @@ export default function ApprovalCenterPage() {
             const q = a.quoteId;
             if (!q) return null;
             return (
-              <div key={a._id} className={`card p-5 ${a.status === "Pending" && a.approverRole === user.role ? "border-2 border-amber-200 bg-amber-50/30" : ""}`}>
+                <div key={a._id} className={`card p-5 ${a.status === "Pending" && String(a.approver?._id || a.approver) === String(user.id) ? "border-2 border-amber-200 bg-amber-50/30" : ""}`}>
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-brand-50 text-brand-700 flex items-center justify-center font-bold">{a.approverRole[0]}</div>
                   <div className="flex-1 min-w-0">
@@ -68,7 +68,7 @@ export default function ApprovalCenterPage() {
                   <div className="flex items-center gap-2">
                     {a.status === "Pending" && (
                       <>
-                        {a.approverRole === user.role || user.role === "ADMIN" || user.role === "FINANCE" ? (
+                        {String(a.approver?._id || a.approver) === String(user.id) || user.role === "ADMIN" || user.role === "FINANCE" ? (
                           <>
                             <button className="btn-primary !py-1.5" onClick={() => setFocus({ a, mode: "approve" })}><CheckCircle2 size={15} /> Approve</button>
                             <button className="btn-danger !py-1.5" onClick={() => setFocus({ a, mode: "reject" })}><XCircle size={15} /> Reject</button>

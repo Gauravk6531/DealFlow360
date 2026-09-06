@@ -20,23 +20,25 @@ const PREFIX = "system-test-";
 const password = "SystemTest@123";
 
 async function cleanup() {
-  const [users, customers, products, dealers, warehouses] = await Promise.all([
+  const [users, customers, products, dealers, warehouses, testQuotes] = await Promise.all([
     User.find({ email: new RegExp(`^${PREFIX}`) }).select("_id"),
     Customer.find({ email: new RegExp(`^${PREFIX}`) }).select("_id"),
     Product.find({ sku: new RegExp(`^${PREFIX}`, "i") }).select("_id"),
     Dealer.find({ email: new RegExp(`^${PREFIX}`) }).select("_id"),
     Warehouse.find({ name: new RegExp(`^${PREFIX}`) }).select("_id"),
+    Quotation.find({ notes: "SYSTEM_TEST" }).select("_id"),
   ]);
   const userIds = users.map((doc) => doc._id);
   const customerIds = customers.map((doc) => doc._id);
   const productIds = products.map((doc) => doc._id);
   const dealerIds = dealers.map((doc) => doc._id);
   const warehouseIds = warehouses.map((doc) => doc._id);
+  const quoteIds = testQuotes.map((doc) => doc._id);
 
   const result = await Promise.all([
-    Quotation.deleteMany({ notes: "SYSTEM_TEST" }),
-    Negotiation.deleteMany({ reason: "SYSTEM_TEST" }),
-    Approval.deleteMany({ reason: "SYSTEM_TEST" }),
+    Quotation.deleteMany({ _id: { $in: quoteIds } }),
+    Negotiation.deleteMany({ $or: [{ reason: "SYSTEM_TEST" }, { quoteId: { $in: quoteIds } }] }),
+    Approval.deleteMany({ $or: [{ reason: "SYSTEM_TEST" }, { quoteId: { $in: quoteIds } }] }),
     Subscription.deleteMany({ name: new RegExp(`^${PREFIX}`) }),
     DealerOffer.deleteMany({ dealerId: { $in: dealerIds } }),
     Inventory.deleteMany({ productId: { $in: productIds } }),

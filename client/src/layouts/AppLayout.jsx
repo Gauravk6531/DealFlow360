@@ -31,7 +31,7 @@ export default function AppLayout() {
         { to: "/", label: "Dashboard", icon: LayoutDashboard },
         { to: "/quotes", label: "Quotations", icon: FileText },
         { to: "/pipeline", label: "Pipeline", icon: GitBranch },
-        { to: "/approvals", label: "Approval Center", icon: BadgeCheck },
+        { to: "/approvals", label: "Approval Center", icon: BadgeCheck, roles: ["SALES_MANAGER", "FINANCE", "ADMIN"] },
         { to: "/negotiations", label: "Negotiation Center", icon: Handshake },
       ],
     },
@@ -54,16 +54,16 @@ export default function AppLayout() {
     },
   ];
 
-  if (user?.role === "ADMIN" || user?.role === "SALES_MANAGER") {
+  if (["ADMIN", "SALES_MANAGER", "FINANCE"].includes(user?.role)) {
     navSections.push({
       title: "Administration",
       items: [
-        { to: "/admin/products", label: "Products", icon: Boxes },
-        { to: "/admin/customers", label: "Customers", icon: Users },
-        { to: "/admin/dealers", label: "Dealers", icon: Store },
-        { to: "/admin/warehouses", label: "Warehouses", icon: Warehouse },
-        { to: "/admin/settings", label: "Policies & Settings", icon: Settings },
-        { to: "/admin/offers", label: "Dealer Offers", icon: Layers },
+        { to: "/admin/products", label: "Products", icon: Boxes, roles: ["ADMIN", "SALES_MANAGER"] },
+        { to: "/admin/customers", label: "Customers", icon: Users, roles: ["ADMIN", "SALES_MANAGER"] },
+        { to: "/admin/dealers", label: "Dealers", icon: Store, roles: ["ADMIN", "SALES_MANAGER"] },
+        { to: "/admin/warehouses", label: "Warehouses", icon: Warehouse, roles: ["ADMIN", "SALES_MANAGER"] },
+        { to: "/admin/settings", label: "Policies & Settings", icon: Settings, roles: ["ADMIN", "SALES_MANAGER", "FINANCE"] },
+        { to: "/admin/offers", label: "Dealer Offers", icon: Layers, roles: ["ADMIN", "SALES_MANAGER"] },
       ],
     });
   }
@@ -88,7 +88,7 @@ export default function AppLayout() {
             <div key={s.title}>
               <div className="px-3 mb-1 text-[10px] font-bold uppercase tracking-wider text-white/40">{s.title}</div>
               <div className="space-y-0.5">
-                {s.items.map((it) => (
+                {s.items.filter((it) => !it.roles || it.roles.includes(user?.role)).map((it) => (
                   <NavLink key={it.to} to={it.to} end={it.to === "/"}
                     className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition ${isActive ? "bg-white/10 text-white" : "text-white/60 hover:bg-white/5 hover:text-white"}`}>
                     <it.icon size={16} /> {it.label}

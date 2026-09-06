@@ -7,8 +7,9 @@ import { scoreOffer } from "./dealerService.js";
 import Customer from "../models/Customer.js";
 import { deriveStage } from "../utils/helpers.js";
 
-export async function salesDashboard({ settings, productMap }) {
-  const quotes = await Quotation.find({}).populate("customerId");
+export async function salesDashboard({ settings, productMap, user }) {
+  const quoteFilter = user?.role === "SALES_REP" ? { salesRepId: user._id } : {};
+  const quotes = await Quotation.find(quoteFilter).populate("customerId");
 
   const pipeline = quotes.filter((q) => deriveStage(q) !== "Lost" && deriveStage(q) !== "Draft");
   const won = quotes.filter((q) => q.wonAt && q.confirmedAt);
@@ -16,7 +17,8 @@ export async function salesDashboard({ settings, productMap }) {
   const pipelineValue = pipeline.reduce((s, q) => s + (q.total || 0), 0);
   const wonValue = won.reduce((s, q) => s + (q.total || 0), 0);
   const atRisk = quotes.filter((q) => q.riskLevel === "High" || q.dealHealthStatus === "At Risk" || q.dealHealthStatus === "Critical");
-  const pendingApprovals = await Approval.countDocuments({ status: "Pending" });
+  const approvalFilter = user?.role === "SALES_REP" ? { status: "Pending", requestedBy: user._id } : { status: "Pending" };
+  const pendingApprovals = await Approval.countDocuments(approvalFilter);
 
   const submitted = quotes.filter((q) => q.submittedAt);
   const avgDiscount = submitted.length
@@ -29,7 +31,7 @@ export async function salesDashboard({ settings, productMap }) {
     byStage[st] = (byStage[st] || 0) + 1;
   });
 
-  const negotiations = await Negotiation.find({}).sort({ createdAt: -1 }).limit(5).populate("customerId");
+  const negotiations = await Negotiation.find({ quoteId: { $in: quotes.map((q) => q._id) } }).sort({ createdAt: -1 }).limit(5).populate("customerId");
 
   return {
     stats: {
@@ -61,8 +63,9 @@ export async function salesDashboard({ settings, productMap }) {
   };
 }
 
-export async function dealIntelligence() {
-  const quotes = await Quotation.find({}).populate("customerId");
+export async function dealIntelligence(user) {
+  const quoteFilter = user?.role === "SALES_REP" ? { salesRepId: user._id } : {};
+  const quotes = await Quotation.find(quoteFilter).populate("customerId");
   const buckets = { healthy: [], atRisk: [], critical: [], stalled: [], marginAnomalies: [], discountAnomalies: [] };
 
   const now = Date.now();
@@ -77,7 +80,7 @@ export async function dealIntelligence() {
     if (q.weightedDiscountPct > 30) buckets.discountAnomalies.push(q);
   }
 
-  const negotiations = await Negotiation.find({});
+  const negotiations = await Negotiation.find({ quoteId: { $in: quotes.map((q) => q._id) } });
 
   return {
     counts: {
@@ -88,7 +91,7 @@ export async function dealIntelligence() {
       marginAnomalies: buckets.marginAnomalies.length,
       discountAnomalies: buckets.discountAnomalies.length,
       activeNegotiations: negotiations.filter((n) => ["Pending", "Counter Offered", "Escalated"].includes(n.status)).length,
-      pendingApprovals: await Approval.countDocuments({ status: "Pending" }),
+      pendingApprovals: await Approval.countDocuments(user?.role === "SALES_REP" ? { status: "Pending", requestedBy: user._id } : { status: "Pending" }),
     },
     lists: buckets,
     avgHealth: quotes.length ? Math.round(quotes.reduce((s, q) => s + (q.dealHealthScore || 0), 0) / quotes.length) : 100,

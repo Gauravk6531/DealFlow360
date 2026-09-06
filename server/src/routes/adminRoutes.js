@@ -10,11 +10,11 @@ router.put("/settings", protect, authorize("ADMIN", "SALES_MANAGER", "FINANCE"),
 
 const ALLOWED_TYPES = ["products", "customers", "dealers", "offers", "warehouses", "inventory", "subscriptions", "concessions"];
 
-router.get("/:type", protect, (req, res, next) => {
+router.get("/:type", protect, authorize("ADMIN", "SALES_MANAGER", "SALES_REP", "FINANCE"), (req, res, next) => {
   if (!ALLOWED_TYPES.includes(req.params.type)) return next();
   admin.list(req, res, next);
 });
-router.get("/:type/:id", protect, (req, res, next) => {
+router.get("/:type/:id", protect, authorize("ADMIN", "SALES_MANAGER", "SALES_REP", "FINANCE"), (req, res, next) => {
   if (!ALLOWED_TYPES.includes(req.params.type)) return next();
   admin.getOne(req, res, next);
 });
@@ -30,6 +30,6 @@ router.delete("/:type/:id", protect, authorize("ADMIN"), (req, res, next) => {
   if (!ALLOWED_TYPES.includes(req.params.type)) return next();
   admin.remove(req, res, next);
 });
-router.get("/dealers/:id/offers", protect, admin.dealerOffers);
+router.get("/dealers/:id/offers", protect, authorize("ADMIN", "SALES_MANAGER", "SALES_REP", "FINANCE"), admin.dealerOffers);
 
 export default router;

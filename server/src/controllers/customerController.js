@@ -28,6 +28,7 @@ function sanitizeQuote(quote) {
     listUnitPrice: l.listUnitPrice,
     discountPct: l.discountPct,
     discountAmount: l.discountAmount,
+    comment: l.comment,
     margin: undefined,
     cost: undefined,
     dealerId: undefined,
@@ -46,6 +47,12 @@ function sanitizeQuote(quote) {
     discountAmount: quote.discountAmount,
     weightedDiscountPct: quote.weightedDiscountPct,
     negotiationStatus: quote.negotiationStatus,
+    approvalStatus: quote.approvalStatus,
+    submittedAt: quote.submittedAt,
+    confirmedAt: quote.confirmedAt,
+    wonAt: quote.wonAt,
+    lostAt: quote.lostAt,
+    version: quote.version,
     fulfillmentStatus: quote.fulfillmentStatus,
     expiresAt: quote.expiresAt,
     createdAt: quote.createdAt,
@@ -168,7 +175,20 @@ export const requestNegotiation = asyncHandler(async (req, res) => {
 
   quote.requestedPrice = target;
   quote.negotiationStatus =
-    result.decision === "AUTO_ACCEPT" ? "Accepted" : result.decision === "COUNTER_OFFER" ? "Counter Offered" : "Negotiating";
+    result.decision === "AUTO_ACCEPT"
+      ? "Accepted"
+      : result.decision === "COUNTER_OFFER"
+        ? "Counter Offered"
+        : result.decision === "ESCALATE"
+          ? "Negotiating"
+          : quote.negotiationStatus;
+  if (result.decision === "AUTO_ACCEPT") {
+    applyCounterOfferToQuote(quote, result);
+    quote.requestedPrice = result.proposedPrice;
+    await recalculateQuote(quote, { settings, customer, productMap: ctx.productMap, offerMap: ctx.offerMap });
+    const { clearPendingApprovals } = await import("../services/approvalService.js");
+    await clearPendingApprovals(quote, "Auto-accepted negotiation does not require approval");
+  }
   quote.version += 1;
   await quote.save();
 
@@ -200,6 +220,7 @@ export const requestNegotiation = asyncHandler(async (req, res) => {
   // Customer-facing response omits all dealer/profit internals
   res.json({
     success: true,
+    quote: sanitizeQuote(quote),
     negotiation: {
       id: String(negotiation._id),
       quoteNumber: quote.quoteNumber,
@@ -290,6 +311,7 @@ export const confirmQuote = asyncHandler(async (req, res) => {
   if (!quote) throw new ApiError(404, "Quote not found");
   verifyVersion(quote, req.body.expectedVersion);
   if (quote.approvalStatus === "Pending") throw new ApiError(400, "Quote is under internal review. You will be notified once confirmed.");
+  if (quote.approvalStatus === "Rejected") throw new ApiError(400, "Quote was rejected and cannot be confirmed.");
   quote.confirmedAt = quote.confirmedAt || new Date();
   quote.wonAt = quote.wonAt || new Date();
   quote.version += 1;

@@ -10,12 +10,12 @@ async function getSettings() {
 
 export const dashboard = asyncHandler(async (req, res) => {
   const settings = await getSettings();
-  const data = await salesDashboard({ settings });
+  const data = await salesDashboard({ settings, user: req.user });
   res.json({ success: true, ...data });
 });
 
 export const dealIntelligenceCtl = asyncHandler(async (req, res) => {
-  const data = await dealIntelligence();
+  const data = await dealIntelligence(req.user);
   res.json({ success: true, ...data });
 });
 

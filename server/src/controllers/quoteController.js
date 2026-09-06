@@ -1,7 +1,6 @@
 import Quotation from "../models/Quotation.js";
 import Customer from "../models/Customer.js";
 import Product from "../models/Product.js";
-import DealerOffer from "../models/DealerOffer.js";
 import Settings from "../models/Settings.js";
 import Approval from "../models/Approval.js";
 import Negotiation from "../models/Negotiation.js";
@@ -12,7 +11,7 @@ import { verifyVersion } from "../middleware/security.js";
 import { recalculateQuote, loadQuoteContext, effectiveDiscountLimit } from "../services/pricingService.js";
 import { computeRisk } from "../services/riskService.js";
 import { computeDealHealth } from "../services/dealHealthService.js";
-import { runApprovals } from "../services/approvalService.js";
+import { runApprovals, clearPendingApprovals } from "../services/approvalService.js";
 import { compareDealersForQuote, scoreOffer } from "../services/dealerService.js";
 import { negotiateQuote, applyCounterOfferToQuote } from "../services/negotiationService.js";
 import { getUpsellRecommendations } from "../services/recommendationService.js";
@@ -25,6 +24,15 @@ async function getSettings() {
   let s = await Settings.findOne({ key: "default" });
   if (!s) s = await Settings.create({ key: "default" });
   return s;
+}
+
+async function getAccessibleQuote(id, user) {
+  const quote = await Quotation.findById(id);
+  if (!quote) throw new ApiError(404, "Quote not found");
+  if (user.role === "SALES_REP" && String(quote.salesRepId) !== String(user._id)) {
+    throw new ApiError(403, "You can only access your own quotes");
+  }
+  return quote;
 }
 
 export async function refreshQuoteIntelligence(quote, opts = {}) {
@@ -63,8 +71,9 @@ export const listQuotes = asyncHandler(async (req, res) => {
 });
 
 export const getQuote = asyncHandler(async (req, res) => {
-  const quote = await Quotation.findById(req.params.id).populate("customerId").populate("salesRepId");
-  if (!quote) throw new ApiError(404, "Quote not found");
+  const quote = await getAccessibleQuote(req.params.id, req.user);
+  await quote.populate("customerId");
+  await quote.populate("salesRepId");
   const settings = await getSettings();
   const ctx = await loadQuoteContext(quote);
   const { customer } = await Customer.findById(quote.customerId).then((c) => ({ customer: c }));
@@ -154,8 +163,7 @@ export const createQuote = asyncHandler(async (req, res) => {
 });
 
 export const updateQuote = asyncHandler(async (req, res) => {
-  const quote = await Quotation.findById(req.params.id);
-  if (!quote) throw new ApiError(404, "Quote not found");
+  const quote = await getAccessibleQuote(req.params.id, req.user);
   verifyVersion(quote, req.body.expectedVersion);
   const { lines } = req.body;
 
@@ -212,8 +220,7 @@ export const updateQuote = asyncHandler(async (req, res) => {
 });
 
 export const addLine = asyncHandler(async (req, res) => {
-  const quote = await Quotation.findById(req.params.id);
-  if (!quote) throw new ApiError(404, "Quote not found");
+  const quote = await getAccessibleQuote(req.params.id, req.user);
   verifyVersion(quote, req.body.expectedVersion);
   const { productId, quantity, discountPct, unitPrice, dealerId, isSubscription, billingCycle } = req.body;
   const product = await Product.findById(productId);
@@ -242,8 +249,7 @@ export const addLine = asyncHandler(async (req, res) => {
 });
 
 export const removeLine = asyncHandler(async (req, res) => {
-  const quote = await Quotation.findById(req.params.id);
-  if (!quote) throw new ApiError(404, "Quote not found");
+  const quote = await getAccessibleQuote(req.params.id, req.user);
   verifyVersion(quote, req.query.expectedVersion);
   const line = quote.lines.id(req.params.lineId);
   if (!line) throw new ApiError(404, "Line not found");
@@ -255,8 +261,7 @@ export const removeLine = asyncHandler(async (req, res) => {
 });
 
 export const submitQuote = asyncHandler(async (req, res) => {
-  const quote = await Quotation.findById(req.params.id);
-  if (!quote) throw new ApiError(404, "Quote not found");
+  const quote = await getAccessibleQuote(req.params.id, req.user);
   verifyVersion(quote, req.body.expectedVersion);
   const refreshed = await refreshQuoteIntelligence(quote);
   const { settings, risk } = refreshed;
@@ -270,8 +275,7 @@ export const submitQuote = asyncHandler(async (req, res) => {
 });
 
 export const whatIf = asyncHandler(async (req, res) => {
-  const quote = await Quotation.findById(req.params.id);
-  if (!quote) throw new ApiError(404, "Quote not found");
+  const quote = await getAccessibleQuote(req.params.id, req.user);
   const settings = await getSettings();
   const customer = await Customer.findById(quote.customerId);
   const { discountPct, quantity, dealerId, includeConcessions } = req.body;
@@ -342,8 +346,7 @@ export const whatIf = asyncHandler(async (req, res) => {
 });
 
 export const applyConcessions = asyncHandler(async (req, res) => {
-  const quote = await Quotation.findById(req.params.id);
-  if (!quote) throw new ApiError(404, "Quote not found");
+  const quote = await getAccessibleQuote(req.params.id, req.user);
   verifyVersion(quote, req.body.expectedVersion);
   const { concessionIds } = req.body;
   const concessions = await Concession.find({ _id: { $in: concessionIds }, available: true });
@@ -360,8 +363,7 @@ export const applyConcessions = asyncHandler(async (req, res) => {
 });
 
 export const negotiate = asyncHandler(async (req, res) => {
-  const quote = await Quotation.findById(req.params.id);
-  if (!quote) throw new ApiError(404, "Quote not found");
+  const quote = await getAccessibleQuote(req.params.id, req.user);
   verifyVersion(quote, req.body.expectedVersion);
   const { requestedPrice, discountPct } = req.body;
   const settings = await getSettings();
@@ -406,7 +408,19 @@ export const negotiate = asyncHandler(async (req, res) => {
   });
 
   quote.requestedPrice = target;
-  quote.negotiationStatus = result.decision === "AUTO_ACCEPT" ? "Accepted" : result.decision === "COUNTER_OFFER" ? "Counter Offered" : "Negotiating";
+  quote.negotiationStatus = result.decision === "AUTO_ACCEPT"
+    ? "Accepted"
+    : result.decision === "COUNTER_OFFER"
+      ? "Counter Offered"
+      : result.decision === "ESCALATE"
+        ? "Negotiating"
+        : quote.negotiationStatus;
+  if (result.decision === "AUTO_ACCEPT") {
+    applyCounterOfferToQuote(quote, result);
+    quote.requestedPrice = result.proposedPrice;
+    await refreshQuoteIntelligence(quote, { settings, customer, ctx });
+    await clearPendingApprovals(quote, "Auto-accepted negotiation does not require approval");
+  }
   quote.version += 1;
   await quote.save();
 
@@ -421,13 +435,12 @@ export const negotiate = asyncHandler(async (req, res) => {
     }).catch(() => {});
   }
 
-  res.json({ success: true, negotiation, result });
+  res.json({ success: true, quote, negotiation, result });
 });
 
 export const acceptCounterOffer = asyncHandler(async (req, res) => {
-  const quote = await Quotation.findById(req.params.id);
+  const quote = await getAccessibleQuote(req.params.id, req.user);
   const negotiationId = req.body.negotiationId || req.params.negotiationId;
-  if (!quote) throw new ApiError(404, "Quote not found");
   verifyVersion(quote, req.body.expectedVersion);
 
   const settings = await getSettings();
@@ -469,8 +482,7 @@ export const acceptCounterOffer = asyncHandler(async (req, res) => {
 });
 
 export const dealerComparison = asyncHandler(async (req, res) => {
-  const quote = await Quotation.findById(req.params.id);
-  if (!quote) throw new ApiError(404, "Quote not found");
+  const quote = await getAccessibleQuote(req.params.id, req.user);
   const settings = await getSettings();
   const ctx = await loadQuoteContext(quote);
   const comparison = await compareDealersForQuote(quote, { settings, productMap: ctx.productMap });
@@ -480,8 +492,9 @@ export const dealerComparison = asyncHandler(async (req, res) => {
 export const listApprovals = asyncHandler(async (req, res) => {
   const approvals = await Approval.find({ status: "Pending" })
     .populate("quoteId")
+    .populate("approver")
     .sort({ createdAt: 1 });
-  const view = approvals.filter((a) => a.approverRole === req.user.role || ["ADMIN", "FINANCE"].includes(req.user.role));
+  const view = approvals.filter((a) => ["ADMIN", "FINANCE"].includes(req.user.role) || String(a.approver?._id || a.approver) === String(req.user._id));
   res.json({ success: true, approvals: view });
 });
 
@@ -492,7 +505,8 @@ export const reviewApproval = asyncHandler(async (req, res) => {
   if (!approval) throw new ApiError(404, "Approval not found");
   const quote = await Quotation.findById(approval.quoteId);
   if (!quote) throw new ApiError(404, "Quote not found");
-  if (approval.approverRole !== req.user.role && req.user.role !== "ADMIN" && req.user.role !== "FINANCE") {
+  const assignedApprover = approval.approver && String(approval.approver) === String(req.user._id);
+  if (!assignedApprover && req.user.role !== "ADMIN" && req.user.role !== "FINANCE") {
     throw new ApiError(403, "Not your approval step");
   }
   const result = await resolveApprovalHelper({ approval, quote, status, approver: req.user, reason });
@@ -505,8 +519,7 @@ async function resolveApprovalHelper({ approval, quote, status, approver, reason
 }
 
 export const fulfillmentPlan = asyncHandler(async (req, res) => {
-  const quote = await Quotation.findById(req.params.id);
-  if (!quote) throw new ApiError(404, "Quote not found");
+  const quote = await getAccessibleQuote(req.params.id, req.user);
   verifyVersion(quote, req.body.expectedVersion);
   const plan = await planFulfillment(quote, { manualOverrides: req.body?.manualOverrides });
   quote.fulfillmentStatus = plan.status;
@@ -518,15 +531,13 @@ export const fulfillmentPlan = asyncHandler(async (req, res) => {
 });
 
 export const billingPreview = asyncHandler(async (req, res) => {
-  const quote = await Quotation.findById(req.params.id);
-  if (!quote) throw new ApiError(404, "Quote not found");
+  const quote = await getAccessibleQuote(req.params.id, req.user);
   const billing = await buildHybridBilling(quote);
   res.json({ success: true, billing });
 });
 
 export const confirmQuote = asyncHandler(async (req, res) => {
-  const quote = await Quotation.findById(req.params.id);
-  if (!quote) throw new ApiError(404, "Quote not found");
+  const quote = await getAccessibleQuote(req.params.id, req.user);
   verifyVersion(quote, req.body.expectedVersion);
 
   if (quote.approvalStatus === "Pending") throw new ApiError(400, "Quote cannot be confirmed while approval is pending");
@@ -536,7 +547,7 @@ export const confirmQuote = asyncHandler(async (req, res) => {
   const customer = await Customer.findById(quote.customerId);
   const ctx = await loadQuoteContext(quote);
   const risk = computeRisk(quote, { settings, customer, productMap: ctx.productMap, offerMap: ctx.offerMap });
-  if (risk.riskScore > (settings.approvalThresholds?.autoMax ?? 20)) {
+  if (risk.riskScore > (settings.approvalThresholds?.autoMax ?? 20) && quote.approvalStatus !== "Approved") {
     throw new ApiError(400, "Quote requires approval before confirmation");
   }
 
@@ -551,8 +562,7 @@ export const confirmQuote = asyncHandler(async (req, res) => {
 });
 
 export const markLost = asyncHandler(async (req, res) => {
-  const quote = await Quotation.findById(req.params.id);
-  if (!quote) throw new ApiError(404, "Quote not found");
+  const quote = await getAccessibleQuote(req.params.id, req.user);
   verifyVersion(quote, req.body.expectedVersion);
   quote.lostAt = quote.lostAt || new Date();
   quote.version += 1;

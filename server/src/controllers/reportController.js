@@ -12,6 +12,7 @@ export const reports = asyncHandler(async (req, res) => {
   if (endDate) q.createdAt.$lte = new Date(endDate);
   if (salesRep) q.salesRepId = salesRep;
   if (customer) q.customerId = customer;
+  if (req.user.role === "SALES_REP") q.salesRepId = req.user._id;
 
   const quotes = await Quotation.find(q)
     .populate("customerId")

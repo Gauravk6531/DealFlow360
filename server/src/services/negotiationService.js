@@ -38,6 +38,19 @@ export async function negotiateQuote(quote, requestedTotalInput, { settings, cus
   if (negotiableLines.length === 0) {
     return {
       decision: "REJECT",
+      originalPrice: originalSubtotal,
+      originalSubtotal,
+      customerRequestedPrice: requestedTotalInput,
+      customerRequestedDiscount: 0,
+      proposedPrice: null,
+      proposedDiscount: null,
+      customerSavings: 0,
+      dealerProfit: 0,
+      companyProfit: 0,
+      dealerId: null,
+      dealerName: "",
+      dealerOptions: [],
+      concessions: [],
       reason: "No negotiable (one-time) line items on this quote.",
       recommendation: "Negotiation is not available for subscription-only quotations.",
     };
@@ -47,7 +60,20 @@ export async function negotiateQuote(quote, requestedTotalInput, { settings, cus
   if (!requestedTotal || requestedTotal >= originalSubtotal) {
     return {
       decision: "AUTO_ACCEPT",
+      originalPrice: originalSubtotal,
+      originalSubtotal,
+      customerRequestedPrice: requestedTotal,
+      customerRequestedDiscount: 0,
       recommendedPrice: originalSubtotal,
+      proposedPrice: originalSubtotal,
+      proposedDiscount: 0,
+      customerSavings: 0,
+      dealerProfit: 0,
+      companyProfit: 0,
+      dealerId: null,
+      dealerName: "",
+      dealerOptions: [],
+      concessions: [],
       reason: "Requested price is above or equal to the quoted price.",
       recommendation: "Accept the existing price.",
     };
@@ -194,6 +220,9 @@ export async function negotiateQuote(quote, requestedTotalInput, { settings, cus
       : `Counter-offer ₹${counterSubtotal.toLocaleString("en-IN")}.`;
   } else {
     decision = "REJECT";
+    customerSavings = 0;
+    dealerProfit = 0;
+    companyProfit = 0;
     reason = "No profitable configuration exists at or below the original quotation. Maintaining dealer and company profitability is mandatory.";
     recommendation = "Reject the request or explore scope changes with the customer.";
   }
@@ -207,7 +236,7 @@ export async function negotiateQuote(quote, requestedTotalInput, { settings, cus
     customerRequestedPrice: requestedTotal,
     customerRequestedDiscount: round2((1 - requestedTotal / originalSubtotal) * 100),
     proposedPrice: recommendedPrice,
-    proposedDiscount: recommendedPrice ? round2((1 - recommendedPrice / originalSubtotal) * 100) : 0,
+    proposedDiscount: recommendedPrice ? round2((1 - recommendedPrice / originalSubtotal) * 100) : null,
     dealerId: selectedDealerId,
     dealerName: selectedDealerName,
     dealerOptions: linePlans.map((p) => ({

@@ -35,7 +35,7 @@ export default function PortalDashboardPage() {
               <div className="flex-1 text-sm text-ink-700/60 hidden sm:block">Created {new Date(q.createdAt).toLocaleDateString()}</div>
               <div className="text-sm font-semibold">{fmtINR(q.total)}</div>
               {q.customerSavings > 0 && <div className="badge bg-emerald-100 text-emerald-700 text-xs">Save {fmtINR(q.customerSavings)}</div>}
-              <StageBadge stage={q.negotiationStatus === "Accepted" ? "Approved" : q.fulfillmentStatus === "Delivered" ? "Won" : q.negotiationStatus === "Negotiating" || q.negotiationStatus === "Counter Offered" ? "Negotiation" : "Sent"} />
+              <StageBadge stage={q.lostAt ? "Lost" : q.wonAt || q.confirmedAt ? "Won" : q.approvalStatus === "Pending" ? "Approval" : q.approvalStatus === "Approved" || q.negotiationStatus === "Accepted" ? "Approved" : q.negotiationStatus === "Negotiating" || q.negotiationStatus === "Counter Offered" ? "Negotiation" : "Sent"} />
             </Link>
           ))}
         </div>
