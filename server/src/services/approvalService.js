@@ -3,6 +3,7 @@ import Notification from "../models/Notification.js";
 import AuditLog from "../models/AuditLog.js";
 import User from "../models/User.js";
 import { buildApprovalChain } from "./riskService.js";
+import { ApiError } from "../utils/error.js";
 
 /**
  * Routing is derived from the risk score ONLY — salespeople never pick
@@ -49,7 +50,8 @@ export async function runApprovals(quote, { settings, risk, actor, reason }) {
       status: i === 0 ? "Pending" : "Skipped",
       previousValue: { riskScore: risk.riskScore, discount: quote.weightedDiscountPct },
       newValue: null,
-      requestedBy: actor?._id,
+      requestedBy: actor?._id || null,
+      expiresAt: new Date(Date.now() + 7 * 86400000),
     });
 
     const approver = await findApprover(role);
@@ -79,6 +81,27 @@ function roleLabel(role) {
 }
 
 export async function resolveApproval({ approval, quote, status, approver, reason }) {
+  if (approval.status !== "Pending") {
+    throw new ApiError(409, "Approval request already decided. Refresh the queue.");
+  }
+  if (approval.expiresAt && new Date() > new Date(approval.expiresAt)) {
+    approval.status = "Expired";
+    approval.reason = reason || "Approval window expired";
+    approval.timestamp = new Date();
+    await approval.save();
+    await Notification.create({
+      role: "SALES_REP",
+      type: "approval",
+      title: `Quote ${quote.quoteNumber} approval expired`,
+      message: "The approval request was not reviewed within 7 days.",
+      quoteId: quote._id,
+    }).catch(() => {});
+    throw new ApiError(410, "Approval request has expired. Re-submit the quote to request a new approval.");
+  }
+  if (approval.requestedBy && approver && String(approval.requestedBy) === String(approver._id) && approver.role !== "ADMIN") {
+    throw new ApiError(403, "You cannot approve your own request.");
+  }
+
   approval.status = status === "approve" ? "Approved" : "Rejected";
   approval.approver = approver._id;
   approval.reason = reason || "";
@@ -108,6 +131,10 @@ export async function resolveApproval({ approval, quote, status, approver, reaso
     });
     await quote.save();
     return { approved: false };
+  }
+
+  if (approval.status !== "Approved") {
+    throw new ApiError(409, "Only an approved step can advance the chain.");
   }
 
   // Activate the next level in the chain (if any), regardless of its prior status.

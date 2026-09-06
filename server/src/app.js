@@ -1,18 +1,29 @@
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
 import dotenv from "dotenv";
 import authRoutes from "./routes/authRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import quoteRoutes from "./routes/quoteRoutes.js";
 import customerRoutes from "./routes/customerRoutes.js";
 import { notFoundHandler, errorHandler } from "./utils/error.js";
+import { sanitizeInput, apiLimiter } from "./middleware/security.js";
 
 dotenv.config();
 
 const app = express();
 
+app.set("trust proxy", 1);
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
 app.use(cors({ origin: process.env.CLIENT_URL || "http://localhost:5173", credentials: true }));
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "100kb" }));
+app.use(sanitizeInput);
+app.use("/api", apiLimiter);
 
 app.get("/api/health", (req, res) => res.json({ success: true, service: "DealFlow360 API", time: new Date().toISOString() }));
 

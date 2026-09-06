@@ -162,8 +162,23 @@ client/
 - `fulfillmentService` prefers a single source per line, respects per-warehouse availability, and reports backorders with replenishment ETA.
 - `billingService` emits a ONE_TIME invoice plus a recurring schedule (periods, proration, cancellation & refund rules) → `HYBRID` billing type when subscriptions exist.
 
+## Security hardening (implemented)
+
+| Layer | Control | Where |
+|---|---|---|
+| Transport | Helmet security headers (`X-Content-Type-Options`, no sniffing, CORP `cross-origin`) | `src/app.js` |
+| Rate limiting | Login/register throttled (20 tries / 15 min, successful attempts skipped); global 600 req/min on `/api` | `src/middleware/security.js` |
+| Input | `sanitizeInput` strips `$`-prefixed / dotted keys from body, query & params (NoSQL injection + prototype pollution) | `src/middleware/security.js` |
+| Payload | `express.json({ limit: "100kb" })` | `src/app.js` |
+| Idempotency | `Idempotency-Key` header on negotiate / accept-counter / submit / confirm / fulfillment / approval-review — replays return the original response, never a second execution (24h TTL store, per-actor scoped) | `src/models/Idempotency.js`, `src/routes/*` |
+| Concurrency | `expectedVersion` optimistic lock — stale writes get 409; `quote.version` bumps on every mutation | `src/controllers/quoteController.js`, `src/controllers/customerController.js` |
+| Approval integrity | Pending-only resolution (already-decided → 409), 7-day `expiresAt` auto-expiry, requester ≠ approver guard (ADMIN exempt), chain only advances after an explicit Approved step | `src/services/approvalService.js`, `src/models/Approval.js` |
+
+Deploy note: terminate TLS at a reverse proxy (nginx/ALB) and add `Strict-Transport-Security`; the app is CORS-pinned to `CLIENT_URL`.
+
 ## Test scripts
 
 - `/tmp/df360_test2.py` — hero flow (quote → what-if → negotiate → accept-counter → fulfillment → billing), steps 1–8 pass.
 - `/tmp/df360_test3.py` — dashboards, portal sanitization, reports, audit; steps 9–19 pass.
 - `/tmp/df360_appr.py` — manager→finance 2-level escalation; passes.
+- `/var/folders/.../opencode/security_smoke.mjs` — security suite (helmet, rate-limit headers, NoSQL injection, 100kb boundary, 409 version guard, idempotent replay no-duplicate, portal leash) — **20/20 pass**.

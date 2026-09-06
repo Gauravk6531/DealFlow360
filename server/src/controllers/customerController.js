@@ -5,6 +5,7 @@ import Negotiation from "../models/Negotiation.js";
 import Approval from "../models/Approval.js";
 import { ApiError } from "../utils/error.js";
 import { asyncHandler } from "../utils/helpers.js";
+import { verifyVersion } from "../middleware/security.js";
 import { loadQuoteContext, recalculateQuote, effectiveDiscountLimit } from "../services/pricingService.js";
 import { computeRisk } from "../services/riskService.js";
 import { negotiateQuote, applyCounterOfferToQuote } from "../services/negotiationService.js";
@@ -114,9 +115,11 @@ export const commentLine = asyncHandler(async (req, res) => {
   const { lineId, text } = req.body;
   const quote = await Quotation.findOne({ _id: req.params.id, customerId: req.customer._id });
   if (!quote) throw new ApiError(404, "Quote not found");
+  verifyVersion(quote, req.body.expectedVersion);
   const line = quote.lines.id(lineId);
   if (!line) throw new ApiError(404, "Line item not found");
   line.comment = text;
+  quote.version += 1;
   await quote.save();
   res.json({ success: true, quote: sanitizeQuote(quote) });
 });
@@ -124,6 +127,7 @@ export const commentLine = asyncHandler(async (req, res) => {
 export const requestNegotiation = asyncHandler(async (req, res) => {
   const quote = await Quotation.findOne({ _id: req.params.id, customerId: req.customer._id });
   if (!quote) throw new ApiError(404, "Quote not found");
+  verifyVersion(quote, req.body.expectedVersion);
 
   const settings = await getSettings();
   const customer = await Customer.findById(quote.customerId);
@@ -165,6 +169,7 @@ export const requestNegotiation = asyncHandler(async (req, res) => {
   quote.requestedPrice = target;
   quote.negotiationStatus =
     result.decision === "AUTO_ACCEPT" ? "Accepted" : result.decision === "COUNTER_OFFER" ? "Counter Offered" : "Negotiating";
+  quote.version += 1;
   await quote.save();
 
   await logAudit({
@@ -216,6 +221,7 @@ export const requestNegotiation = asyncHandler(async (req, res) => {
 export const acceptCounterOffer = asyncHandler(async (req, res) => {
   const quote = await Quotation.findOne({ _id: req.params.id, customerId: req.customer._id });
   if (!quote) throw new ApiError(404, "Quote not found");
+  verifyVersion(quote, req.body.expectedVersion);
   const negotiationId = req.body.negotiationId || req.params.negotiationId;
 
   let negotiation;
@@ -245,6 +251,7 @@ export const acceptCounterOffer = asyncHandler(async (req, res) => {
   negotiation.status = "Accepted";
   await negotiation.save();
   quote.negotiationStatus = "Accepted";
+  quote.version += 1;
   await quote.save();
 
   const { runApprovals } = await import("../services/approvalService.js");
@@ -281,9 +288,11 @@ export const acceptCounterOffer = asyncHandler(async (req, res) => {
 export const confirmQuote = asyncHandler(async (req, res) => {
   const quote = await Quotation.findOne({ _id: req.params.id, customerId: req.customer._id });
   if (!quote) throw new ApiError(404, "Quote not found");
+  verifyVersion(quote, req.body.expectedVersion);
   if (quote.approvalStatus === "Pending") throw new ApiError(400, "Quote is under internal review. You will be notified once confirmed.");
   quote.confirmedAt = quote.confirmedAt || new Date();
   quote.wonAt = quote.wonAt || new Date();
+  quote.version += 1;
   await quote.save();
   await logAudit({ user: null, userEmail: req.customer.email, action: "CUSTOMER_CONFIRMED", entity: "Quotation", entityId: quote._id, quoteId: quote._id, reason: "Customer confirmed quotation" });
   res.json({ success: true, quote: sanitizeQuote(quote) });

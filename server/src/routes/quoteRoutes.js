@@ -5,6 +5,7 @@ import * as notification from "../controllers/notificationController.js";
 import * as dashboard from "../controllers/dashboardController.js";
 import * as report from "../controllers/reportController.js";
 import { protect, authorize } from "../middleware/auth.js";
+import { idempotent } from "../middleware/security.js";
 
 const router = Router();
 
@@ -17,20 +18,20 @@ router.get("/quotes/:id", quote.getQuote);
 router.put("/quotes/:id", quote.updateQuote);
 router.post("/quotes/:id/add-line", quote.addLine);
 router.delete("/quotes/:id/lines/:lineId", quote.removeLine);
-router.post("/quotes/:id/submit", quote.submitQuote);
+router.post("/quotes/:id/submit", idempotent, quote.submitQuote);
 router.post("/quotes/:id/what-if", quote.whatIf);
-router.post("/quotes/:id/negotiate", quote.negotiate);
-router.post("/quotes/:id/accept-counter", authorize("SALES_REP", "SALES_MANAGER", "ADMIN", "FINANCE"), quote.acceptCounterOffer);
+router.post("/quotes/:id/negotiate", idempotent, quote.negotiate);
+router.post("/quotes/:id/accept-counter", idempotent, authorize("SALES_REP", "SALES_MANAGER", "ADMIN", "FINANCE"), quote.acceptCounterOffer);
 router.get("/quotes/:id/dealer-comparison", quote.dealerComparison);
 router.post("/quotes/:id/concessions", quote.applyConcessions);
-router.post("/quotes/:id/fulfillment", quote.fulfillmentPlan);
+router.post("/quotes/:id/fulfillment", idempotent, quote.fulfillmentPlan);
 router.get("/quotes/:id/billing", quote.billingPreview);
-router.post("/quotes/:id/confirm", authorize("SALES_REP", "SALES_MANAGER", "ADMIN", "FINANCE"), quote.confirmQuote);
+router.post("/quotes/:id/confirm", idempotent, authorize("SALES_REP", "SALES_MANAGER", "ADMIN", "FINANCE"), quote.confirmQuote);
 router.post("/quotes/:id/lost", quote.markLost);
 
 // Approvals
 router.get("/approvals", quote.listApprovals);
-router.post("/approvals/:id/review", quote.reviewApproval);
+router.post("/approvals/:id/review", idempotent, quote.reviewApproval);
 
 // Negotiations
 router.get("/negotiations", negotiation.listNegotiations);

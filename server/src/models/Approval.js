@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-export const APPROVAL_STATUS = ["Pending", "Approved", "Rejected", "Skipped"];
+export const APPROVAL_STATUS = ["Pending", "Approved", "Rejected", "Expired", "Skipped"];
 
 const approvalSchema = new mongoose.Schema(
   {
@@ -13,6 +13,7 @@ const approvalSchema = new mongoose.Schema(
     previousValue: { type: Object, default: null },
     newValue: { type: Object, default: null },
     requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    expiresAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
