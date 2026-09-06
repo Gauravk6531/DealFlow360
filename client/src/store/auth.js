@@ -2,10 +2,21 @@ import { create } from "zustand";
 import api from "../services/api";
 
 const TOKEN_KEY = "df360-token";
+const USER_KEY = "df360-user";
+const CUSTOMER_KEY = "df360-customer";
 const MODE_KEY = "df360-mode";
 
+const readStored = (key) => {
+  try {
+    return JSON.parse(localStorage.getItem(key) || "null");
+  } catch {
+    localStorage.removeItem(key);
+    return null;
+  }
+};
+
 export const useAuth = create((set, get) => ({
-  user: null,
+  user: readStored(USER_KEY),
   token: localStorage.getItem(TOKEN_KEY) || null,
   loading: false,
 
@@ -14,6 +25,7 @@ export const useAuth = create((set, get) => ({
     try {
       const { data } = await api.post("/auth/login", { email, password });
       localStorage.setItem(TOKEN_KEY, data.token);
+      localStorage.setItem(USER_KEY, JSON.stringify(data.user));
       localStorage.setItem(MODE_KEY, "user");
       set({ user: data.user, token: data.token, loading: false });
       return { ok: true, user: data.user };
@@ -28,6 +40,7 @@ export const useAuth = create((set, get) => ({
     try {
       const { data } = await api.post("/auth/register", payload);
       localStorage.setItem(TOKEN_KEY, data.token);
+      localStorage.setItem(USER_KEY, JSON.stringify(data.user));
       localStorage.setItem(MODE_KEY, "user");
       set({ user: data.user, token: data.token, loading: false });
       return { ok: true, user: data.user };
@@ -39,6 +52,8 @@ export const useAuth = create((set, get) => ({
 
   logout: () => {
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    localStorage.removeItem(CUSTOMER_KEY);
     localStorage.removeItem("df360-customer-token");
     localStorage.removeItem(MODE_KEY);
     set({ user: null, token: null });
@@ -51,7 +66,7 @@ export const useAuth = create((set, get) => ({
 }));
 
 export const useCustomerAuth = create((set, get) => ({
-  customer: null,
+  customer: readStored(CUSTOMER_KEY),
   token: localStorage.getItem("df360-customer-token") || null,
   loading: false,
 
@@ -60,6 +75,7 @@ export const useCustomerAuth = create((set, get) => ({
     try {
       const { data } = await api.post("/auth/customer/login", { email, password });
       localStorage.setItem("df360-customer-token", data.token);
+      localStorage.setItem(CUSTOMER_KEY, JSON.stringify(data.customer));
       localStorage.setItem(MODE_KEY, "customer");
       set({ customer: data.customer, token: data.token, loading: false });
       return { ok: true, customer: data.customer };
@@ -71,6 +87,8 @@ export const useCustomerAuth = create((set, get) => ({
 
   logout: () => {
     localStorage.removeItem("df360-customer-token");
+    localStorage.removeItem(CUSTOMER_KEY);
+    localStorage.removeItem(USER_KEY);
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(MODE_KEY);
     set({ customer: null, token: null });

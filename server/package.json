@@ -7,7 +7,9 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "seed": "node src/seed/seed.js"
+    "seed": "node src/seed/seed.js",
+    "systemtest": "node src/seed/systemTestData.js",
+    "systemtest:cleanup": "node src/seed/systemTestData.js cleanup"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -17,6 +19,6 @@
     "express-rate-limit": "^8.7.0",
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.5.1"
+    "mongoose": "^8.24.4"
   }
 }

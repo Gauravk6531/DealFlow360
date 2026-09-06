@@ -6,6 +6,8 @@
   "scripts": {
     "setup": "cd server && npm install && cd ../client && npm install",
     "seed": "cd server && npm run seed",
+    "systemtest": "cd server && npm run systemtest",
+    "systemtest:cleanup": "cd server && npm run systemtest:cleanup",
     "dev": "concurrently -n server,client -c blue,green \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
     "server": "npm run dev --prefix server",
     "client": "npm run dev --prefix client"
